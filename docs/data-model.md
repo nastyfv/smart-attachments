@@ -48,7 +48,7 @@
     <tr>
       <td><code>status</code></td>
       <td>string</td>
-      <td><code>active</code> или <code>orphan</code> — статус файла</td>
+      <td><code>active</code> или <code>orphan</code> - статус файла</td>
     </tr>
     <tr>
       <td><code>createdAt</code></td>
@@ -145,7 +145,7 @@ Markdown-файл в папке `catalog`, который описывает о�
     <tr>
       <td><code>index</code></td>
       <td>Record&lt;string, Attachment&gt;</td>
-      <td>Ключ — путь к файлу, значение — запись</td>
+      <td>Ключ - путь к файлу, значение - запись</td>
     </tr>
     <tr>
       <td><code>settings</code></td>
