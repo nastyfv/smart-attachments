@@ -3,32 +3,188 @@
 ## Сущности
 
 ### Attachment (вложение)
-Файл в папке `attachments`.
 
-| Поле      | Тип                  | Описание                         |
+Файл в папке `attachments`, для которого создаётся запись в индексе.
 
-| path      | string               | Путь относительно корня vault    |
-| name      | string               | Имя файла с расширением          |
-| ext       | string               | Расширение (pdf, jpg, docx)      |
-| size      | number               | Размер в байтах                  |
-| hash      | string               | SHA-256 хеш содержимого          |
-| notePath  | string               | Путь к заметке-каталогу          |
-| status    | `active` \| `orphan` | Статус: файл есть / удалён       |
-| createdAt | string (ISO 8601)    | Дата создания записи             |
-| deletedAt | string (ISO 8601)    | Дата удаления файла (для orphan) |
+<table>
+  <thead>
+    <tr>
+      <th>Поле</th>
+      <th>Тип</th>
+      <th>Описание</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>path</code></td>
+      <td>string</td>
+      <td>Путь относительно корня vault</td>
+    </tr>
+    <tr>
+      <td><code>name</code></td>
+      <td>string</td>
+      <td>Имя файла с расширением</td>
+    </tr>
+    <tr>
+      <td><code>ext</code></td>
+      <td>string</td>
+      <td>Расширение (pdf, jpg, docx)</td>
+    </tr>
+    <tr>
+      <td><code>size</code></td>
+      <td>number</td>
+      <td>Размер в байтах</td>
+    </tr>
+    <tr>
+      <td><code>hash</code></td>
+      <td>string</td>
+      <td>SHA-256 хеш содержимого</td>
+    </tr>
+    <tr>
+      <td><code>notePath</code></td>
+      <td>string</td>
+      <td>Путь к заметке-каталогу</td>
+    </tr>
+    <tr>
+      <td><code>status</code></td>
+      <td>string</td>
+      <td><code>active</code> или <code>orphan</code> — статус файла</td>
+    </tr>
+    <tr>
+      <td><code>createdAt</code></td>
+      <td>string (ISO 8601)</td>
+      <td>Дата создания записи</td>
+    </tr>
+    <tr>
+      <td><code>deletedAt</code></td>
+      <td>string (ISO 8601)</td>
+      <td>Дата удаления (только для <code>orphan</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+### Note (заметка-каталог)
+
+Markdown-файл в папке `catalog`, который описывает одно вложение.
+
+<table>
+  <thead>
+    <tr>
+      <th>Поле</th>
+      <th>Тип</th>
+      <th>Описание</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>notePath</code></td>
+      <td>string</td>
+      <td>Путь к .md-файлу</td>
+    </tr>
+    <tr>
+      <td><code>attachment_id</code></td>
+      <td>string</td>
+      <td>Первые 8 символов хеша (не FK, производное значение)</td>
+    </tr>
+    <tr>
+      <td><code>file</code></td>
+      <td>string</td>
+      <td>Путь к файлу (дублирует <code>attachment.path</code> для самодостаточности)</td>
+    </tr>
+    <tr>
+      <td><code>name</code></td>
+      <td>string</td>
+      <td>Имя файла</td>
+    </tr>
+    <tr>
+      <td><code>ext</code></td>
+      <td>string</td>
+      <td>Расширение</td>
+    </tr>
+    <tr>
+      <td><code>size</code></td>
+      <td>number</td>
+      <td>Размер в байтах</td>
+    </tr>
+    <tr>
+      <td><code>hash</code></td>
+      <td>string</td>
+      <td>Полный SHA-256 хеш</td>
+    </tr>
+    <tr>
+      <td><code>created</code></td>
+      <td>string (ISO 8601)</td>
+      <td>Дата генерации заметки</td>
+    </tr>
+    <tr>
+      <td><code>status</code></td>
+      <td>string</td>
+      <td><code>active</code> или <code>orphan</code>. Меняется при удалении файла</td>
+    </tr>
+    <tr>
+      <td><code>tags</code></td>
+      <td>list</td>
+      <td>Теги во фронтматтере (по умолчанию <code>[attachment]</code>)</td>
+    </tr>
+  </tbody>
+</table>
 
 ### Index (индекс)
-Агрегат всех записей о вложениях.
 
-| Поле     | Тип                        | Описание                               |
+Структура в `data.json`, которая хранит все записи о вложениях.
 
-| index    | Record<string, Attachment> | Ключ - путь к файлу, значение - запись |
-| settings | object                     | Настройки плагина                      |
+<table>
+  <thead>
+    <tr>
+      <th>Поле</th>
+      <th>Тип</th>
+      <th>Описание</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>index</code></td>
+      <td>Record&lt;string, Attachment&gt;</td>
+      <td>Ключ — путь к файлу, значение — запись</td>
+    </tr>
+    <tr>
+      <td><code>settings</code></td>
+      <td>object</td>
+      <td>Настройки плагина</td>
+    </tr>
+  </tbody>
+</table>
+
+### Settings (настройки)
+
+Singleton-объект в `data.json`, который хранит конфигурацию плагина.
+
+<table>
+  <thead>
+    <tr>
+      <th>Поле</th>
+      <th>Тип</th>
+      <th>Описание</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>attachmentsFolder</code></td>
+      <td>string</td>
+      <td>Папка с вложениями (по умолчанию <code>attachments</code>)</td>
+    </tr>
+    <tr>
+      <td><code>catalogFolder</code></td>
+      <td>string</td>
+      <td>Папка для заметок (по умолчанию <code>catalog</code>)</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Связи
 
-- Один Attachment → одна заметка-каталог (1:1).
-- Один Attachment → ноль или более обратных ссылок из других заметок (1:N) - задел на v2.
+- Один Attachment соответствует одной заметке Note (1:1).
+- Один Attachment может иметь ноль или более обратных ссылок из других заметок (1:N) — задел на v2.
 
 ## Хранение
 
