@@ -130,7 +130,7 @@ Smart Attachments - плагин для Obsidian, который автомат�
     </tr>
     <tr>
       <td>FR</td>
-      <td>Functional Requirement — функциональное требование</td>
+      <td>Functional Requirement - функциональное требование</td>
     </tr>
     <tr>
       <td>NFR</td>
