@@ -1,0 +1,9 @@
+{
+  "id": "smart-attachments",
+  "name": "Smart Attachments",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Auto-catalog attachments",
+  "author": "You",
+  "isDesktopOnly": true
+}
