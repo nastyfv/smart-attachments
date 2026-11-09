@@ -1,4 +1,4 @@
-# Smart Attachments — описание проекта
+# Smart Attachments - описание проекта
 
 ## Зачем этот проект
 
