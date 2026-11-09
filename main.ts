@@ -1,24 +1,71 @@
 // ============================================================
 // Smart Attachments — плагин для Obsidian
-// Автоматически создаёт заметку-каталог для каждого вложения
+// v2: группировка по типу файла + теги по типу
 // ============================================================
 
 import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, normalizePath } from 'obsidian';
 import * as crypto from 'crypto';
 
-// Настройки плагина
-interface SmartAttachmentsSettings {
-    attachmentsFolder: string;  // папка с файлами
-    catalogFolder: string;      // папка для заметок-каталога
+// ─── Категория файла по расширению ──────────────────────────
+function getFileCategory(ext: string): { folder: string; tag: string } {
+    const extLower = ext.toLowerCase();
+    const mapping: Record<string, { folder: string; tag: string }> = {
+        jpg:  { folder: 'images',    tag: 'image' },
+        jpeg: { folder: 'images',    tag: 'image' },
+        png:  { folder: 'images',    tag: 'image' },
+        gif:  { folder: 'images',    tag: 'image' },
+        svg:  { folder: 'images',    tag: 'image' },
+        webp: { folder: 'images',    tag: 'image' },
+        bmp:  { folder: 'images',    tag: 'image' },
+        ico:  { folder: 'images',    tag: 'image' },
+
+        pdf:  { folder: 'documents', tag: 'document' },
+        doc:  { folder: 'documents', tag: 'document' },
+        docx: { folder: 'documents', tag: 'document' },
+        xls:  { folder: 'documents', tag: 'document' },
+        xlsx: { folder: 'documents', tag: 'document' },
+        ppt:  { folder: 'documents', tag: 'document' },
+        pptx: { folder: 'documents', tag: 'document' },
+        txt:  { folder: 'documents', tag: 'document' },
+        rtf:  { folder: 'documents', tag: 'document' },
+        md:   { folder: 'documents', tag: 'document' },
+        csv:  { folder: 'documents', tag: 'document' },
+
+        mp3:  { folder: 'audio', tag: 'audio' },
+        wav:  { folder: 'audio', tag: 'audio' },
+        ogg:  { folder: 'audio', tag: 'audio' },
+        flac: { folder: 'audio', tag: 'audio' },
+        m4a:  { folder: 'audio', tag: 'audio' },
+
+        mp4:  { folder: 'video', tag: 'video' },
+        mov:  { folder: 'video', tag: 'video' },
+        avi:  { folder: 'video', tag: 'video' },
+        mkv:  { folder: 'video', tag: 'video' },
+        webm: { folder: 'video', tag: 'video' },
+
+        zip:  { folder: 'archives', tag: 'archive' },
+        rar:  { folder: 'archives', tag: 'archive' },
+        '7z': { folder: 'archives', tag: 'archive' },
+        tar:  { folder: 'archives', tag: 'archive' },
+        gz:   { folder: 'archives', tag: 'archive' },
+    };
+    return mapping[extLower] || { folder: 'other', tag: 'other' };
 }
 
-// Значения по умолчанию
+// ─── Настройки ───────────────────────────────────────────────
+interface SmartAttachmentsSettings {
+    attachmentsFolder: string;
+    catalogFolder: string;
+    groupByType: boolean;
+}
+
 const DEFAULT_SETTINGS: SmartAttachmentsSettings = {
     attachmentsFolder: 'attachments',
     catalogFolder: 'catalog',
+    groupByType: true,
 };
 
-// Запись в индексе — одно вложение
+// ─── Типы данных ─────────────────────────────────────────────
 interface IndexEntry {
     path: string;
     name: string;
@@ -31,20 +78,18 @@ interface IndexEntry {
     deletedAt?: string;
 }
 
-// Данные, которые сохраняются на диск
 interface PluginData {
     settings: SmartAttachmentsSettings;
     index: Record<string, IndexEntry>;
 }
 
+// ─── Плагин ──────────────────────────────────────────────────
 export default class SmartAttachmentsPlugin extends Plugin {
     data: PluginData;
 
     async onload() {
-        // Загружаем настройки и индекс с диска
         await this.loadPluginData();
 
-        // Событие: создан новый файл
         this.registerEvent(
             this.app.vault.on('create', async (file) => {
                 if (!(file instanceof TFile)) return;
@@ -53,7 +98,6 @@ export default class SmartAttachmentsPlugin extends Plugin {
             })
         );
 
-        // Событие: файл переименован
         this.registerEvent(
             this.app.vault.on('rename', async (file, oldPath) => {
                 if (!(file instanceof TFile)) return;
@@ -62,7 +106,6 @@ export default class SmartAttachmentsPlugin extends Plugin {
             })
         );
 
-        // Событие: файл удалён
         this.registerEvent(
             this.app.vault.on('delete', async (file) => {
                 if (!(file instanceof TFile)) return;
@@ -71,16 +114,12 @@ export default class SmartAttachmentsPlugin extends Plugin {
             })
         );
 
-        // Команда: пересобрать индекс
         this.addCommand({
             id: 'rebuild-index',
             name: 'Rebuild attachments index',
-            callback: async () => {
-                await this.rebuildIndex();
-            },
+            callback: async () => { await this.rebuildIndex(); },
         });
 
-                // Команда: удалить все orphan-заметки
         this.addCommand({
             id: 'delete-orphan-notes',
             name: 'Delete all orphan notes',
@@ -100,31 +139,35 @@ export default class SmartAttachmentsPlugin extends Plugin {
                 new Notice(`Deleted ${deleted} orphan notes`);
             },
         });
-        
-        // Вкладка настроек
-        this.addSettingTab(new SmartAttachmentsSettingTab(this.app, this));
 
+        this.addSettingTab(new SmartAttachmentsSettingTab(this.app, this));
         new Notice('Smart Attachments loaded');
     }
 
-    // Проверка: файл лежит в папке вложений?
     isInAttachments(path: string): boolean {
         const folder = normalizePath(this.data.settings.attachmentsFolder);
         return path.startsWith(folder + '/');
     }
 
-    // Новый файл — создаём заметку
+    getExpectedNotePath(fileName: string, ext: string): string {
+        const catalogFolder = normalizePath(this.data.settings.catalogFolder);
+        let targetFolder = catalogFolder;
+        if (this.data.settings.groupByType) {
+            const category = getFileCategory(ext);
+            targetFolder = normalizePath(`${catalogFolder}/${category.folder}`);
+        }
+        const noteName = fileName.replace(/\.[^/.]+$/, '') + '.md';
+        return normalizePath(`${targetFolder}/${noteName}`);
+    }
+
     async processNewFile(file: TFile) {
         const hash = await this.computeHash(file);
-
-        // Если такой же файл уже есть — пропускаем (защита от дублей)
         const existing = Object.values(this.data.index).find(
             (e) => e.hash === hash && e.status === 'active'
         );
         if (existing) return;
 
         const notePath = await this.createCatalogNote(file, hash);
-
         this.data.index[file.path] = {
             path: file.path,
             name: file.name,
@@ -138,52 +181,30 @@ export default class SmartAttachmentsPlugin extends Plugin {
         await this.savePluginData();
     }
 
-      // Файл переименован — обновляем запись в индексе и саму заметку
     async processRename(file: TFile, oldPath: string) {
-        console.log('[SmartAttachments] rename called:', oldPath, '->', file.path);
-
         const entry = this.data.index[oldPath];
-        if (!entry) {
-            console.log('[SmartAttachments] entry not found in index for oldPath:', oldPath);
-            return;
-        }
+        if (!entry) return;
 
         const oldFilePath = entry.path;
         const oldName = entry.name;
 
-        // Обновляем запись в индексе
         delete this.data.index[oldPath];
         entry.path = file.path;
         entry.name = file.name;
         this.data.index[file.path] = entry;
 
-        // Обновляем содержимое заметки
         const noteFile = this.app.vault.getAbstractFileByPath(entry.notePath);
         if (noteFile instanceof TFile) {
-            console.log('[SmartAttachments] updating note:', entry.notePath);
-
             let content = await this.app.vault.read(noteFile);
-
-            // Заменяем старый путь на новый
             content = content.split(oldFilePath).join(file.path);
-
-            // Обновляем имя файла в метаданных
             content = content.split(`name: "${oldName}"`).join(`name: "${file.name}"`);
-
-            // Обновляем заголовок
             content = content.split(`# ${oldName}`).join(`# ${file.name}`);
-
             await this.app.vault.modify(noteFile, content);
-
-            console.log('[SmartAttachments] note updated');
-        } else {
-            console.log('[SmartAttachments] note file not found at path:', entry.notePath);
         }
 
         await this.savePluginData();
     }
 
-    // Файл удалён — помечаем заметку как orphan
     async processDelete(file: TFile) {
         const entry = this.data.index[file.path];
         if (!entry) return;
@@ -191,7 +212,6 @@ export default class SmartAttachmentsPlugin extends Plugin {
         entry.status = 'orphan';
         entry.deletedAt = new Date().toISOString();
 
-        // Обновляем саму заметку: меняем статус на orphan
         const noteFile = this.app.vault.getAbstractFileByPath(entry.notePath);
         if (noteFile instanceof TFile) {
             let content = await this.app.vault.read(noteFile);
@@ -202,17 +222,14 @@ export default class SmartAttachmentsPlugin extends Plugin {
         await this.savePluginData();
     }
 
-    // Создаём заметку-каталог по шаблону
     async createCatalogNote(file: TFile, hash: string): Promise<string> {
-        const catalogFolder = normalizePath(this.data.settings.catalogFolder);
+        const category = getFileCategory(file.extension);
+        const notePath = this.getExpectedNotePath(file.name, file.extension);
+        const targetFolder = notePath.substring(0, notePath.lastIndexOf('/'));
 
-        // Создаём папку каталога, если её нет
-        if (!this.app.vault.getAbstractFileByPath(catalogFolder)) {
-            await this.app.vault.createFolder(catalogFolder);
+        if (!this.app.vault.getAbstractFileByPath(targetFolder)) {
+            await this.app.vault.createFolder(targetFolder);
         }
-
-        const noteName = file.name.replace(/\.[^/.]+$/, '') + '.md';
-        const notePath = normalizePath(`${catalogFolder}/${noteName}`);
 
         const content = `---
 attachment_id: "${hash.slice(0, 8)}"
@@ -223,7 +240,7 @@ size: ${file.stat.size}
 hash: "${hash}"
 created: "${new Date().toISOString()}"
 status: active
-tags: [attachment]
+tags: [attachment, ${category.tag}]
 ---
 
 # ${file.name}
@@ -245,13 +262,11 @@ tags: [attachment]
         return notePath;
     }
 
-    // Считаем SHA-256 хеш файла
     async computeHash(file: TFile): Promise<string> {
         const buffer = await this.app.vault.readBinary(file);
         return crypto.createHash('sha256').update(Buffer.from(buffer)).digest('hex');
     }
 
-    // Пересборка индекса: сканируем папку вложений заново
     async rebuildIndex() {
         const folder = this.app.vault.getAbstractFileByPath(
             normalizePath(this.data.settings.attachmentsFolder)
@@ -263,8 +278,31 @@ tags: [attachment]
 
         let created = 0;
         let orphans = 0;
+        let moved = 0;
 
-        // Добавляем недостающие заметки
+        // 1. Миграция: переместить существующие заметки в правильные подпапки
+        for (const entry of Object.values(this.data.index)) {
+            if (entry.status !== 'active') continue;
+
+            const noteFile = this.app.vault.getAbstractFileByPath(entry.notePath);
+            if (!(noteFile instanceof TFile)) continue;
+
+            const expectedPath = this.getExpectedNotePath(entry.name, entry.ext);
+            if (entry.notePath === expectedPath) continue;
+
+            if (this.app.vault.getAbstractFileByPath(expectedPath)) continue;
+
+            const targetFolder = expectedPath.substring(0, expectedPath.lastIndexOf('/'));
+            if (!this.app.vault.getAbstractFileByPath(targetFolder)) {
+                await this.app.vault.createFolder(targetFolder);
+            }
+
+            await this.app.vault.rename(noteFile, expectedPath);
+            entry.notePath = expectedPath;
+            moved++;
+        }
+
+        // 2. Создать недостающие заметки
         const files = this.app.vault.getFiles().filter((f) => this.isInAttachments(f.path));
         for (const file of files) {
             if (!this.data.index[file.path]) {
@@ -284,7 +322,7 @@ tags: [attachment]
             }
         }
 
-        // Помечаем пропавшие файлы как orphan
+        // 3. Пометить пропавшие файлы как orphan
         for (const entry of Object.values(this.data.index)) {
             if (entry.status === 'active' && !this.app.vault.getAbstractFileByPath(entry.path)) {
                 entry.status = 'orphan';
@@ -294,10 +332,9 @@ tags: [attachment]
         }
 
         await this.savePluginData();
-        new Notice(`Rebuild done: created ${created}, orphans ${orphans}`);
+        new Notice(`Rebuild done: created ${created}, orphans ${orphans}, moved ${moved}`);
     }
 
-    // Загрузка данных с диска
     async loadPluginData() {
         const loaded = (await this.loadData()) || {};
         this.data = {
@@ -306,13 +343,12 @@ tags: [attachment]
         };
     }
 
-    // Сохранение данных на диск
     async savePluginData() {
         await this.saveData(this.data);
     }
 }
 
-// Вкладка настроек плагина
+// ─── Вкладка настроек ────────────────────────────────────────
 class SmartAttachmentsSettingTab extends PluginSettingTab {
     plugin: SmartAttachmentsPlugin;
 
@@ -349,6 +385,18 @@ class SmartAttachmentsSettingTab extends PluginSettingTab {
                     .setValue(this.plugin.data.settings.catalogFolder)
                     .onChange(async (value) => {
                         this.plugin.data.settings.catalogFolder = value;
+                        await this.plugin.savePluginData();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName('Group by type')
+            .setDesc('Раскладывать заметки по подпапкам (images/, documents/, audio/, video/, archives/, other/). После изменения настройки запустите "Rebuild attachments index".')
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(this.plugin.data.settings.groupByType)
+                    .onChange(async (value) => {
+                        this.plugin.data.settings.groupByType = value;
                         await this.plugin.savePluginData();
                     })
             );
