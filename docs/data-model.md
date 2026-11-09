@@ -178,6 +178,11 @@ Singleton-объект в `data.json`, который хранит конфиг�
       <td>string</td>
       <td>Папка для заметок (по умолчанию <code>catalog</code>)</td>
     </tr>
+    <tr>
+      <td><code>groupByType</code></td>
+      <td>boolean</td>
+      <td>Раскладывать заметки по подпапкам (по умолчанию <code>true</code>)</td>
+    </tr>
   </tbody>
 </table>
 
